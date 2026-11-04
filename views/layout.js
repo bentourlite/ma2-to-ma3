@@ -38,7 +38,7 @@ td button { padding: 4px 10px; font-size: 13px }
 `;
 
 function page(title, body, user = null, wide = false) {
-  const nav = user ? `<div class="nav"><a href="/">Converter</a>${user.is_admin ? `<a href="/admin">Admin</a>` : ""}<span class="muted">${esc(user.email)}</span>
+  const nav = user ? `<div class="nav"><a href="/">Converter</a>${user.is_admin ? `<a href="/admin">Admin</a>` : ""}<a href="/account">${esc(user.email)}</a>
     <form method="post" action="/logout" style="margin:0"><button type="submit">Sign out</button></form></div>` : "";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)} · MA2 to MA3 Fixture Converter</title>

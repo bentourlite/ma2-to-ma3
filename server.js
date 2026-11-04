@@ -226,11 +226,32 @@ app.post("/admin/users/:id/admin", requireAdmin, (req, res) => {
   res.redirect("/admin");
 });
 
+/* ---------- account ---------- */
+const accountPage = (req, msg = "", ok = false) => page("Your account", `
+  <form method="post" action="/account/password" class="card narrow" style="margin-top:0">
+    <h1>Change password</h1>
+    ${msg ? `<p class="${ok ? "muted" : "err"}">${esc(msg)}</p>` : ""}
+    <label>Current password<input type="password" name="current" id="current" autocomplete="current-password" required></label>
+    <label>New password<input type="password" name="password" id="password" autocomplete="new-password" required minlength="10"></label>
+    <p class="muted">At least 10 characters. Other devices are signed out.</p>
+    <button class="primary" type="submit">Change password</button>
+  </form>`, req.user, true);
+app.get("/account", requireUser, (req, res) => res.send(accountPage(req)));
+app.post("/account/password", requireUser, (req, res) => {
+  if (!bcrypt.compareSync(String(req.body.current || ""), req.user.password_hash)) return res.status(400).send(accountPage(req, "Your current password is wrong."));
+  const pw = String(req.body.password || "");
+  if (pw.length < 10) return res.status(400).send(accountPage(req, "Use a password of at least 10 characters."));
+  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(bcrypt.hashSync(pw, 12), req.user.id);
+  db.prepare("DELETE FROM sessions WHERE user_id = ?").run(req.user.id);
+  setSession(res, req, req.user.id);
+  res.send(accountPage(req, "Password changed.", true));
+});
+
 /* ---------- the converter ---------- */
 const converterHtml = fs.readFileSync(path.join(__dirname, "public", "converter.html"), "utf8");
 app.get("/", requireUser, (req, res) => {
   const bar = `<div style="display:flex;gap:12px;justify-content:flex-end;align-items:center;font:14px system-ui,sans-serif;padding:8px 16px;max-width:1240px;margin:0 auto">
-    <span>${esc(req.user.name)}</span>${req.user.is_admin ? `<a href="/admin" style="color:inherit">Admin</a>` : ""}
+    <a href="/account" style="color:inherit">${esc(req.user.name)}</a>${req.user.is_admin ? `<a href="/admin" style="color:inherit">Admin</a>` : ""}
     <form method="post" action="/logout" style="margin:0"><button type="submit" style="font:inherit;background:none;border:1px solid currentColor;border-radius:6px;padding:4px 10px;color:inherit;cursor:pointer">Sign out</button></form></div>`;
   res.set("Cache-Control", "no-store").send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0">${bar}${converterHtml}</body></html>`);
 });
