@@ -341,12 +341,15 @@ function parseFixtureType(ft, fileName, doc) {
     const defFrac = def === null ? null : def <= 255 ? def / 256 : def / 16777216;
     const snap = /^(true|yes|1)$/i.test(ga(ct,"snap") || "");
     const uname = (fnEls[0] && ga(fnEls[0],"attribute_user_name","subattribute_user_name")) || "";
-    // physical values for channel sets: Kelvin names win, otherwise linear inside the function
+    // physical values for channel sets: MA3 turns a set's physical value back into DMX along the function's
+    // straight line, so the set's physical value must sit on that line at its exact DMX value (the name keeps the real Kelvin)
     functions.forEach(f => f.sets.forEach(s => {
-      const k = s.name.match(/(\d+(?:\.\d+)?)\s*K$/i);
-      const lin = x => f.to > f.from ? f.physFrom + (x - f.from) / (f.to - f.from) * (f.physTo - f.physFrom) : f.physFrom;
-      if (s.physFrom === null || s.physFrom === undefined) s.physFrom = k ? +k[1] : (s.from !== null ? lin(s.from) : null);
-      if (s.physTo === null || s.physTo === undefined) s.physTo = k ? +k[1] : (s.to !== null ? lin(s.to) : s.physFrom);
+      // GDTF maps physical values linearly from the function's first to its last DMX value (inclusive)
+      const q = 256 ** offs.length, A = Math.round(f.from * q), B = Math.round(f.to * q) - 1;
+      const lin = x => B > A ? f.physFrom + (Math.round(x * q) - A) / (B - A) * (f.physTo - f.physFrom) : f.physFrom;
+      const last = s.to !== null ? Math.max(s.from, s.to - 1 / q) : s.from;
+      if (s.physFrom === null || s.physFrom === undefined) s.physFrom = s.from !== null ? +lin(s.from).toFixed(4) : null;
+      if (s.physTo === null || s.physTo === undefined) s.physTo = s.from !== null ? +lin(last).toFixed(4) : s.physFrom;
     }));
     const hl = num(ga(ct,"highlight","highlight_value"));
     const label = [feature, ...functions.map(f => f.name)].join(" ").toLowerCase();
@@ -530,8 +533,17 @@ function fixtureBody(model, meta, ind) {
         const hasSets = f.sets.length > 0;
         L.push(`${I(7)}<ChannelFunction Name="${esc(f.name)}" Attribute="${esc(f.attr)}" OriginalAttribute="" DMXFrom="${dmxStr(f.from, c.bytes)}" Default="${dmxStr(def0 >= f.from && def0 < f.to ? def0 : f.from, c.bytes)}" PhysicalFrom="${(+f.physFrom).toFixed(6)}" PhysicalTo="${(+f.physTo).toFixed(6)}" RealFade="0.000000" RealAcceleration="0.000000"${hasSets ? "" : " /"}>`);
         if (hasSets) {
-          [...f.sets].filter(s => s.from !== null).sort((a,b) => a.from - b.from)
-            .forEach(s => L.push(`${I(8)}<ChannelSet Name="${esc(s.name)}" DMXFrom="${dmxStr(s.from, c.bytes)}"${s.physFrom !== null && s.physFrom !== undefined ? ` PhysicalFrom="${(+s.physFrom).toFixed(6)}"` : ""}${s.physTo !== null && s.physTo !== undefined ? ` PhysicalTo="${(+s.physTo).toFixed(6)}"` : ""} />`));
+          // MA3 sets run until the next set starts, so close each MA2 set at its own end with an unnamed filler set
+          const sorted = [...f.sets].filter(s => s.from !== null).sort((a,b) => a.from - b.from);
+          const q = 2 ** (8 * c.bytes), step = v => Math.round(v * q);
+          const withGaps = [];
+          if (sorted.length && step(sorted[0].from) > step(f.from)) withGaps.push({ name: "", from: f.from });
+          sorted.forEach((s, i) => {
+            withGaps.push(s);
+            const next = sorted[i + 1] ? sorted[i + 1].from : f.to;
+            if (s.to !== null && s.to !== undefined && step(s.to) < step(next) && step(s.to) > step(s.from)) withGaps.push({ name: "", from: s.to });
+          });
+          withGaps.forEach(s => L.push(`${I(8)}<ChannelSet Name="${esc(s.name)}" DMXFrom="${dmxStr(s.from, c.bytes)}"${s.physFrom !== null && s.physFrom !== undefined ? ` PhysicalFrom="${(+s.physFrom).toFixed(6)}"` : ""}${s.physTo !== null && s.physTo !== undefined ? ` PhysicalTo="${(+s.physTo).toFixed(6)}"` : ""} />`));
           L.push(`${I(7)}</ChannelFunction>`);
         }
       });
