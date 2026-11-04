@@ -1,0 +1,10 @@
+{
+  "name": "ma2-to-ma3-converter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Login-protected grandMA2 to grandMA3 fixture converter with invite links",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=22.13" },
+  "dependencies": { "bcryptjs": "3.0.3", "express": "4.21.2" }
+}

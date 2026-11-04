@@ -1,0 +1,755 @@
+<title>MA2 to MA3 Fixture Converter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a desk-style two-pane tool. Left: input + mapping. Right: preview of modes, channels, presets and outputs. */
+:root {
+  --bg: #f3f4f6; --panel: #ffffff; --ink: #16181d; --muted: #5d6470; --line: #d9dce2;
+  --accent: #d97a00; --accent-ink: #ffffff; --chip: #eceef2; --ok: #1f8a4c; --warn: #b25b00; --err: #c0362c;
+  --code-bg: #f7f8fa;
+  --f-display: "Barlow Semi Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121418; --panel: #1b1e24; --ink: #e8eaee; --muted: #9aa1ad; --line: #2e333c;
+  --accent: #ffa31a; --accent-ink: #1a1205; --chip: #262a32; --ok: #4cc27f; --warn: #f0a24a; --err: #ff6b5e;
+  --code-bg: #15171c; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121418; --panel: #1b1e24; --ink: #e8eaee; --muted: #9aa1ad; --line: #2e333c;
+  --accent: #ffa31a; --accent-ink: #1a1205; --chip: #262a32; --ok: #4cc27f; --warn: #f0a24a; --err: #ff6b5e;
+  --code-bg: #15171c; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px 48px }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 20px }
+header h1 { font-family: var(--f-display); font-weight: 700; font-size: 30px; letter-spacing: .01em; margin: 0; text-wrap: balance }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 70ch }
+.grid { display: grid; grid-template-columns: minmax(0, 380px) minmax(0, 1fr); gap: 20px; align-items: start }
+@media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr) } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0 }
+.panel h2 { font-family: var(--f-display); font-weight: 600; font-size: 13px; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); margin: 0 }
+.stack { display: grid; gap: 20px; min-width: 0 }
+.drop { border: 2px dashed var(--line); border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; display: grid; gap: 6px; transition: border-color .15s }
+.drop:hover, .drop.over, .drop:focus-visible { border-color: var(--accent); outline: none }
+.drop strong { font-family: var(--f-display); font-size: 18px; font-weight: 600 }
+.drop span { color: var(--muted); font-size: 13px }
+.files { display: grid; gap: 6px }
+.file { display: flex; gap: 8px; align-items: center; font-size: 13px; padding: 6px 8px; background: var(--chip); border-radius: 6px; min-width: 0 }
+.file .n { font-family: var(--f-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0 }
+.tag { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 99px; background: var(--chip); color: var(--muted); white-space: nowrap; letter-spacing: .02em }
+.tag.sample { background: var(--accent); color: var(--accent-ink) }
+.tag.ok { color: var(--ok) } .tag.warn { color: var(--warn) }
+label.f { display: grid; gap: 4px; font-size: 13px; color: var(--muted) }
+input[type=text], input[type=number], select { font: inherit; font-size: 14px; color: var(--ink); background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; min-width: 0 }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px }
+button { font: inherit; font-weight: 600; font-size: 14px; border-radius: 7px; padding: 9px 14px; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--ink) }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
+button:disabled { opacity: .5; cursor: not-allowed }
+.btns { display: flex; flex-wrap: wrap; gap: 8px }
+.map { display: grid; grid-template-columns: auto 1fr; gap: 6px 10px; align-items: center; font-size: 13px }
+.map code { font-family: var(--f-mono); font-size: 12px }
+.summary { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 14px }
+.summary b { font-family: var(--f-display); font-size: 22px; font-weight: 700; display: block; line-height: 1.1; font-variant-numeric: tabular-nums }
+.summary div { color: var(--muted) }
+.tabs { display: flex; gap: 6px; flex-wrap: wrap }
+.tabs button { padding: 6px 12px; font-size: 13px }
+.tabs button[aria-selected=true] { background: var(--ink); color: var(--panel); border-color: var(--ink) }
+.tblwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: top }
+th { font-family: var(--f-display); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: .08em; color: var(--muted); background: var(--code-bg) }
+tr:last-child td { border-bottom: 0 }
+td.mono { font-family: var(--f-mono); font-size: 12px }
+.sw { display: inline-block; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px; margin-right: 6px; border: 1px solid var(--line) }
+.notes { display: grid; gap: 4px; font-size: 13px; margin: 0; padding-left: 18px }
+.notes li.warn { color: var(--warn) } .notes li.err { color: var(--err) } .notes li.info { color: var(--muted) }
+pre { margin: 0; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-family: var(--f-mono); font-size: 12px; overflow: auto; max-height: 420px; white-space: pre }
+.toast { font-size: 13px; color: var(--ok); min-height: 1.2em }
+.empty { color: var(--muted); font-size: 14px }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>MA2 to MA3 Fixture Converter</h1>
+    <p>Drop one or more grandMA2 fixture type XML exports (one per mode). They are merged into a single grandMA3 fixture type with one DMX mode per file, and the colour presets stored in each mode come across too. Everything runs in your browser; nothing is uploaded.</p>
+  </header>
+
+  <div class="grid">
+    <div class="stack">
+      <section class="panel" aria-labelledby="h-in">
+        <h2 id="h-in">1 · MA2 files</h2>
+        <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose MA2 XML files">
+          <strong>Drop MA2 .xml files here</strong>
+          <span>or click to choose · one file per mode</span>
+        </div>
+        <input type="file" id="fileIn" accept=".xml,text/xml" multiple hidden>
+        <div class="files" id="files"></div>
+        <div class="btns"><button id="loadSample" type="button">Load example fixture</button><button id="clear" type="button">Clear</button></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-ft">
+        <h2 id="h-ft">2 · MA3 fixture type</h2>
+        <label class="f">Name<input type="text" id="ftName"></label>
+        <div class="row2">
+          <label class="f">Short name<input type="text" id="ftShort"></label>
+          <label class="f">Manufacturer<input type="text" id="ftMfr"></label>
+        </div>
+        <div class="row2">
+          <label class="f">MA3 data version<input type="text" id="dataVer" value="2.2.0.0"></label>
+          <label class="f">First preset (pool 4)<input type="number" id="presetStart" value="1" min="1"></label>
+        </div>
+        <label class="f" style="display:flex;gap:8px;align-items:center;color:var(--ink)"><input type="checkbox" id="keepGeneric"> Keep MA2's generic Min / Min &gt; Max / Max channel sets</label>
+        <label class="f">Single-channel presets
+          <select id="singleMode">
+            <option value="both">Channel sets and preset plugin</option>
+            <option value="channelset">Channel sets only</option>
+            <option value="plugin">Preset plugin only</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="panel" aria-labelledby="h-map">
+        <h2 id="h-map">3 · Attribute mapping</h2>
+        <p class="empty" style="margin:0">MA2 attribute on the left, MA3 attribute it becomes on the right. Edit any that look wrong.</p>
+        <div class="map" id="map"></div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="panel" aria-labelledby="h-res">
+        <h2 id="h-res">Result</h2>
+        <div class="summary" id="summary"></div>
+        <ul class="notes" id="notes"></ul>
+        <div class="btns">
+          <button class="primary" id="dlZip" type="button">Download MA3 bundle (.zip)</button>
+          <button id="copyXml" type="button">Copy MA3 XML</button>
+          <button id="copyLua" type="button">Copy preset plugin</button>
+        </div>
+        <div class="toast" id="toast" role="status"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-modes">
+        <h2 id="h-modes">Modes</h2>
+        <div class="tabs" id="modeTabs" role="tablist"></div>
+        <div id="modeView"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="h-out">
+        <h2 id="h-out">Output</h2>
+        <div class="tabs" id="outTabs" role="tablist">
+          <button type="button" data-out="xml" aria-selected="true">MA3 fixture XML</button>
+          <button type="button" data-out="gdtf" aria-selected="false">GDTF description.xml</button>
+          <button type="button" data-out="lua" aria-selected="false">Preset plugin (Lua)</button>
+        </div>
+        <pre id="outView"></pre>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+"use strict";
+/* ---------- Example MA2 export (clearly an example, replaced when you load your own) ---------- */
+const SAMPLE_M1 = `<?xml version="1.0" encoding="utf-8"?>
+<MA xmlns="http://schemas.malighting.de/grandma2/xml/MA" major_vers="3" minor_vers="9" stream_vers="60">
+  <Info datetime="2026-01-01T12:00:00" showfile="example" />
+  <FixtureType name="Example LED Wash Mode 1" mode="Mode 1">
+    <short_name>ExWash M1</short_name>
+    <manufacturer>Example</manufacturer>
+    <Modules index="0">
+      <Module index="0" class="Wash" beam_type="Wash" beam_angle="25">
+        <ChannelType index="0" attribute="DIM" feature="DIMMER" coarse="1" fine="2">
+          <ChannelFunction index="0" from="0" to="100" min_dmx_24="0" max_dmx_24="16777215" physfrom="0" physto="1" attribute="DIM" />
+        </ChannelType>
+        <ChannelType index="1" attribute="COLORRGB1" feature="RGB" coarse="3">
+          <ChannelFunction index="0" from="0" to="100" min_dmx_24="0" max_dmx_24="16777215" physfrom="0" physto="100" attribute="COLORRGB1" />
+        </ChannelType>
+        <ChannelType index="2" attribute="COLORRGB2" feature="RGB" coarse="4">
+          <ChannelFunction index="0" from="0" to="100" min_dmx_24="0" max_dmx_24="16777215" physfrom="0" physto="100" attribute="COLORRGB2" />
+        </ChannelType>
+        <ChannelType index="3" attribute="COLORRGB3" feature="RGB" coarse="5">
+          <ChannelFunction index="0" from="0" to="100" min_dmx_24="0" max_dmx_24="16777215" physfrom="0" physto="100" attribute="COLORRGB3" />
+        </ChannelType>
+      </Module>
+    </Modules>
+    <Instances><Instance index="0" module_index="0" /></Instances>
+  </FixtureType>
+</MA>`;
+const SAMPLE_M2 = `<?xml version="1.0" encoding="utf-8"?>
+<MA xmlns="http://schemas.malighting.de/grandma2/xml/MA" major_vers="3" minor_vers="9" stream_vers="60">
+  <Info datetime="2026-01-01T12:00:00" showfile="example" />
+  <FixtureType name="Example LED Wash Mode 2" mode="Mode 2">
+    <short_name>ExWash M2</short_name>
+    <manufacturer>Example</manufacturer>
+    <Modules index="0">
+      <Module index="0" class="Wash" beam_type="Wash" beam_angle="25">
+        <ChannelType index="0" attribute="DIM" feature="DIMMER" coarse="1" fine="2">
+          <ChannelFunction index="0" from="0" to="100" min_dmx_24="0" max_dmx_24="16777215" physfrom="0" physto="1" attribute="DIM" />
+        </ChannelType>
+        <ChannelType index="1" attribute="SHUTTER" feature="SHUTTER" coarse="3">
+          <ChannelFunction index="0" name="Closed" min_dmx_24="0" max_dmx_24="2097151" attribute="SHUTTER" />
+          <ChannelFunction index="1" name="Open" min_dmx_24="2097152" max_dmx_24="4194303" attribute="SHUTTER" />
+          <ChannelFunction index="2" name="Strobe" min_dmx_24="4194304" max_dmx_24="16777215" physfrom="1" physto="20" subattribute="STROBE" />
+        </ChannelType>
+        <ChannelType index="2" attribute="COLORRGB1" feature="RGB" coarse="4">
+          <ChannelFunction index="0" from="0" to="100" min_dmx_24="0" max_dmx_24="16777215" physfrom="0" physto="100" attribute="COLORRGB1" />
+        </ChannelType>
+        <ChannelType index="3" attribute="COLORRGB2" feature="RGB" coarse="5">
+          <ChannelFunction index="0" from="0" to="100" min_dmx_24="0" max_dmx_24="16777215" physfrom="0" physto="100" attribute="COLORRGB2" />
+        </ChannelType>
+        <ChannelType index="4" attribute="COLORRGB3" feature="RGB" coarse="6">
+          <ChannelFunction index="0" from="0" to="100" min_dmx_24="0" max_dmx_24="16777215" physfrom="0" physto="100" attribute="COLORRGB3" />
+        </ChannelType>
+        <ChannelType index="5" attribute="COLORRGB4" feature="RGB" coarse="7">
+          <ChannelFunction index="0" from="0" to="100" min_dmx_24="0" max_dmx_24="16777215" physfrom="0" physto="100" attribute="COLORRGB4" />
+        </ChannelType>
+      </Module>
+    </Modules>
+    <Instances><Instance index="0" module_index="0" /></Instances>
+    <Presets>
+      <Preset index="1" name="Congo" type="COLOR"><Value attribute="COLORRGB1" value="30" /><Value attribute="COLORRGB2" value="0" /><Value attribute="COLORRGB3" value="100" /><Value attribute="COLORRGB4" value="0" /></Preset>
+      <Preset index="2" name="Lavender" type="COLOR"><Value attribute="COLORRGB1" value="75" /><Value attribute="COLORRGB2" value="45" /><Value attribute="COLORRGB3" value="100" /><Value attribute="COLORRGB4" value="20" /></Preset>
+      <Preset index="3" name="Amber" type="COLOR"><Value attribute="COLORRGB1" value="100" /><Value attribute="COLORRGB2" value="55" /><Value attribute="COLORRGB3" value="0" /><Value attribute="COLORRGB4" value="0" /></Preset>
+      <Preset index="4" name="Warm White" type="COLOR"><Value attribute="COLORRGB1" value="100" /><Value attribute="COLORRGB2" value="80" /><Value attribute="COLORRGB3" value="50" /><Value attribute="COLORRGB4" value="100" /></Preset>
+    </Presets>
+  </FixtureType>
+</MA>`;
+
+/* ---------- Attribute knowledge ---------- */
+// MA3/GDTF attribute -> [FeatureGroup, Feature, ActivationGroup, PhysicalUnit, Pretty]
+const MA3_ATTR = {
+  Dimmer:["Dimmer","Dimmer","","LuminousIntensity","Dim"], Pan:["Position","PanTilt","PanTilt","Angle","P"], Tilt:["Position","PanTilt","PanTilt","Angle","T"],
+  PanRotate:["Position","PanTilt","","AngularSpeed","P Rotate"], TiltRotate:["Position","PanTilt","","AngularSpeed","T Rotate"],
+  Shutter1:["Beam","Beam","","None","Sh1"], Shutter1Strobe:["Beam","Beam","","Frequency","Strobe1"],
+  Color1:["Color","Color","","None","C1"], Color2:["Color","Color","","None","C2"], Color1WheelSpin:["Color","Color","","AngularSpeed","C1 Spin"],
+  ColorAdd_R:["Color","RGB","ColorRGB","ColorComponent","R"], ColorAdd_G:["Color","RGB","ColorRGB","ColorComponent","G"], ColorAdd_B:["Color","RGB","ColorRGB","ColorComponent","B"],
+  ColorAdd_W:["Color","RGB","ColorRGB","ColorComponent","W"], ColorAdd_WW:["Color","RGB","ColorRGB","ColorComponent","WW"], ColorAdd_CW:["Color","RGB","ColorRGB","ColorComponent","CW"],
+  ColorAdd_A:["Color","RGB","ColorRGB","ColorComponent","A"], ColorAdd_UV:["Color","RGB","ColorRGB","ColorComponent","UV"], ColorAdd_C:["Color","RGB","ColorRGB","ColorComponent","C"],
+  ColorAdd_M:["Color","RGB","ColorRGB","ColorComponent","M"], ColorAdd_Y:["Color","RGB","ColorRGB","ColorComponent","Y"], ColorAdd_L:["Color","RGB","ColorRGB","ColorComponent","L"],
+  ColorAdd_GY:["Color","RGB","ColorRGB","ColorComponent","GY"], ColorAdd_RY:["Color","RGB","ColorRGB","ColorComponent","RY"],
+  ColorSub_C:["Color","RGB","ColorRGB","ColorComponent","C"], ColorSub_M:["Color","RGB","ColorRGB","ColorComponent","M"], ColorSub_Y:["Color","RGB","ColorRGB","ColorComponent","Y"],
+  CTO:["Color","Color","","Temperature","CTO"], CTC:["Color","Color","","Temperature","CTC"], CTB:["Color","Color","","Temperature","CTB"], Tint:["Color","Color","","None","Tint"],
+  ColorMacro1:["Color","Color","","None","Color Macro1"], ColorMixMode:["Color","Color","","None","Color Mix Mode"],
+  Gobo1:["Gobo","Gobo","Gobo1","None","G1"], Gobo1Pos:["Gobo","Gobo","Gobo1","Angle","G1 <>"], Gobo1PosRotate:["Gobo","Gobo","Gobo1","AngularSpeed","G1 <> Rot"],
+  Gobo2:["Gobo","Gobo","Gobo2","None","G2"], Gobo2Pos:["Gobo","Gobo","Gobo2","Angle","G2 <>"], Gobo2PosRotate:["Gobo","Gobo","Gobo2","AngularSpeed","G2 <> Rot"],
+  Prism1:["Beam","Beam","Prism","None","Prism1"], Prism1Pos:["Beam","Beam","Prism","Angle","Prism1 <>"], Prism1PosRotate:["Beam","Beam","Prism","AngularSpeed","Prism1 <> Rot"],
+  Effects1:["Gobo","Gobo","","None","FX1"], Focus1:["Focus","Focus","","None","Focus1"], Zoom:["Focus","Focus","","Angle","Zoom"], Iris:["Beam","Beam","","None","Iris"],
+  Frost1:["Beam","Beam","","None","Frost1"], Frost2:["Beam","Beam","","None","Frost2"], Control1:["Control","Control","","None","Ctrl1"],
+  PositionMSpeed:["Control","Control","","Time","Pos MSpeed"], DimmerCurve:["Dimmer","Dimmer","","None","Dim Curve"], Fans:["Control","Control","","None","Fans"],
+  BladeA1:["Shapers","Shapers","","None","A1"], BladeB1:["Shapers","Shapers","","None","B1"], BladeA2:["Shapers","Shapers","","None","A2"], BladeB2:["Shapers","Shapers","","None","B2"],
+  BladeA3:["Shapers","Shapers","","None","A3"], BladeB3:["Shapers","Shapers","","None","B3"], BladeA4:["Shapers","Shapers","","None","A4"], BladeB4:["Shapers","Shapers","","None","B4"], ShaperRot:["Shapers","Shapers","","Angle","Shaper Rot"]
+};
+// MA2 attribute -> MA3 attribute (defaults, editable)
+const MA2_TO_MA3 = {
+  DIM:"Dimmer", INTENSITY:"Dimmer", PAN:"Pan", TILT:"Tilt", SHUTTER:"Shutter1", STROBE:"Shutter1Strobe",
+  COLOR1:"Color1", COLOR2:"Color2", COLORRGB1:"ColorAdd_R", COLORRGB2:"ColorAdd_G", COLORRGB3:"ColorAdd_B", COLORRGB4:"ColorAdd_W",
+  COLORRGB5:"ColorAdd_A", COLORRGB6:"ColorAdd_WW", COLORRGB7:"ColorAdd_CW", COLORRGB8:"ColorAdd_UV", COLORTEMPERATURE:"CTC", COLORCROSSFADE:"ColorMixMode", COLORUV:"ColorAdd_UV", COLORMIXMSPEED:"PositionMSpeed", CTC:"CTC", CTO:"CTO", CTB:"CTB", TINT:"Tint",
+  COLORMACRO1:"ColorMacro1", GOBO1:"Gobo1", GOBO1_POS:"Gobo1Pos", GOBO2:"Gobo2", GOBO2_POS:"Gobo2Pos", PRISMA1:"Prism1", PRISMA1_POS:"Prism1Pos",
+  EFFECTWHEEL:"Effects1", FOCUS:"Focus1", ZOOM:"Zoom", IRIS:"Iris", FROST:"Frost1", FROST1:"Frost1", FROST2:"Frost2",
+  CONTROL:"Control1", CONTROL1:"Control1", FIXTURE_GLOBAL_RESET:"Control1", POSITIONMSPEED:"PositionMSpeed", PTSPEED:"PositionMSpeed", DIMMERCURVE:"DimmerCurve",
+  A1:"BladeA1", B1:"BladeB1", A2:"BladeA2", B2:"BladeB2", A3:"BladeA3", B3:"BladeB3", A4:"BladeA4", B4:"BladeB4", SHAPER_ROT:"ShaperRot"
+};
+const CMY = { COLORRGB1:"ColorSub_C", COLORRGB2:"ColorSub_M", COLORRGB3:"ColorSub_Y" };
+const SWATCH = { ColorAdd_R:[255,0,0], ColorAdd_G:[0,255,0], ColorAdd_B:[0,0,255], ColorAdd_W:[255,255,255], ColorAdd_A:[255,170,0], ColorAdd_UV:[110,0,255], ColorAdd_L:[180,255,0], ColorAdd_C:[0,255,255], ColorAdd_WW:[255,215,170], ColorAdd_CW:[220,235,255] };
+
+/* ---------- XML helpers (namespace and case tolerant) ---------- */
+const ln = el => (el.localName || el.nodeName).toLowerCase();
+const kids = (el, ...names) => [...el.children].filter(c => names.includes(ln(c)));
+const desc = (el, ...names) => [...el.getElementsByTagName("*")].filter(c => names.includes(ln(c)));
+function ga(el, ...names) {
+  for (const n of names) for (const a of el.attributes) if (a.name.toLowerCase() === n) return a.value;
+  return null;
+}
+function childText(el, ...names) {
+  for (const n of names) { const c = [...el.children].find(c => ln(c) === n); if (c && c.textContent.trim()) return c.textContent.trim(); }
+  return null;
+}
+const num = v => (v === null || v === undefined || v === "" || isNaN(+v)) ? null : +v;
+const esc = s => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+// DMX fields come in several spellings; returns fractions of full scale 0..1
+const DMX_PAIRS = [["min_dmx_24","max_dmx_24",24],["from_dmx_24","to_dmx_24",24],["dmx_from_24","dmx_to_24",24],["min_dmx_16","max_dmx_16",16],
+  ["min_dmx","max_dmx",8],["from_dmx","to_dmx",8],["dmx_from","dmx_to",8],["dmxfrom","dmxto",8],["min_dt","max_dt",8]];
+function dmxRange(el) {
+  for (const [a,b,bits] of DMX_PAIRS) {
+    const f = num(ga(el,a)), t = num(ga(el,b));
+    if (f !== null || t !== null) { const full = 2 ** bits; return { from: (f ?? 0) / full, to: t === null ? null : (t + 1) / full, bits }; }
+  }
+  return null;
+}
+
+/* ---------- MA2 parsing ---------- */
+function parseMA2(text, fileName) {
+  const doc = new DOMParser().parseFromString(text, "application/xml");
+  if (doc.getElementsByTagName("parsererror").length) throw new Error(`${fileName} is not valid XML.`);
+  const fts = desc(doc.documentElement, "fixturetype");
+  if (!fts.length) throw new Error(`${fileName} has no FixtureType in it. Export the fixture type from the MA2 fixture type pool (Export > Fixture Type).`);
+  return fts.map(ft => parseFixtureType(ft, fileName, doc));
+}
+
+function parseFixtureType(ft, fileName, doc) {
+  const notes = [];
+  const name = ga(ft,"name") || childText(ft,"name","long_name") || fileName.replace(/\.xml$/i,"");
+  let mode = ga(ft,"mode") || childText(ft,"mode");
+  if (!mode) { const m = name.match(/mode\s*\S+/i); mode = m ? m[0] : name; }
+  const fixtureName = name.replace(/^\(\d+\)\s*/, "").replace(new RegExp("\\s*" + mode.replace(/[.*+?^${}()|[\]\\]/g,"\\$&") + "\\s*$","i"), "").trim() || name;
+  const manufacturer = ga(ft,"manufacturer") || childText(ft,"manufacturer") || "";
+  const shortName = ga(ft,"short_name","shortname") || childText(ft,"short_name","shortname") || "";
+
+  // modules and their instance counts/offsets
+  const modules = desc(ft, "module");
+  const instances = desc(ft, "instance");
+  const instByModule = {};
+  instances.forEach((ins, i) => {
+    const mi = num(ga(ins,"module_index","module")) ?? 0;
+    (instByModule[mi] ||= []).push({ index: i, offset: num(ga(ins,"patch","patch_offset","offset","dmx_offset")) });
+  });
+
+  const channels = [];
+  const ctEls = desc(ft, "channeltype");
+  ctEls.forEach((ct, ci) => {
+    const modEl = ct.closest ? [...modules].find(m => m.contains(ct)) : null;
+    const modIndex = modEl ? (num(ga(modEl,"index")) ?? modules.indexOf(modEl)) : 0;
+    const attr = (ga(ct,"attribute","attrib") || childText(ct,"attribute") || `CH${ci+1}`).toUpperCase();
+    const feature = (ga(ct,"feature") || "").toUpperCase();
+    const offs = [ga(ct,"coarse"), ga(ct,"fine"), ga(ct,"ultra","extra_fine","extrafine","superfine")].map(num).filter(v => v !== null && v > 0);
+    if (!offs.length) { notes.push(["warn", `Channel ${attr} has no DMX address in ${mode}; skipped.`]); return; }
+    const fnEls = kids(ct, "channelfunction");
+    const functions = (fnEls.length ? fnEls : [ct]).map((cf, fi) => {
+      const r = dmxRange(cf) || (fnEls.length ? null : { from: 0, to: 1 });
+      const pf = num(ga(cf,"physfrom","phys_from","physicalfrom")), pt = num(ga(cf,"physto","phys_to","phystto","physicalto"));
+      const vf = num(ga(cf,"from")), vt = num(ga(cf,"to"));
+      const fattr = (ga(cf,"subattribute","sub_attribute") || ga(cf,"attribute") || attr).toUpperCase();
+      const sets = kids(cf, "channelset").map((cs, si) => {
+        const sr = dmxRange(cs);
+        return { name: ga(cs,"name") || `Set ${si+1}`, from: sr ? sr.from : null, to: sr ? sr.to : null,
+          physFrom: num(ga(cs,"physfrom","phys_from","from")), physTo: num(ga(cs,"physto","phys_to","to")) };
+      });
+      return { name: ga(cf,"name") || "", attr: fattr, from: r ? r.from : null, to: r ? r.to : null,
+        physFrom: pf ?? vf ?? 0, physTo: pt ?? vt ?? 1, sets };
+    });
+    // fill missing ranges by splitting evenly / chaining
+    functions.forEach((f, i) => {
+      if (f.from === null) f.from = i === 0 ? 0 : (functions[i-1].to ?? i / functions.length);
+      if (f.to === null) f.to = functions[i+1] && functions[i+1].from !== null ? functions[i+1].from : 1;
+    });
+    functions.sort((a,b) => a.from - b.from);
+    const def = num(ga(ct,"default","default_value"));
+    const defFrac = def === null ? null : def <= 255 ? def / 256 : def / 16777216;
+    const snap = /^(true|yes|1)$/i.test(ga(ct,"snap") || "");
+    const uname = (fnEls[0] && ga(fnEls[0],"attribute_user_name","subattribute_user_name")) || "";
+    // physical values for channel sets: Kelvin names win, otherwise linear inside the function
+    functions.forEach(f => f.sets.forEach(s => {
+      const k = s.name.match(/(\d+(?:\.\d+)?)\s*K$/i);
+      const lin = x => f.to > f.from ? f.physFrom + (x - f.from) / (f.to - f.from) * (f.physTo - f.physFrom) : f.physFrom;
+      if (s.physFrom === null || s.physFrom === undefined) s.physFrom = k ? +k[1] : (s.from !== null ? lin(s.from) : null);
+      if (s.physTo === null || s.physTo === undefined) s.physTo = k ? +k[1] : (s.to !== null ? lin(s.to) : s.physFrom);
+    }));
+    const hl = num(ga(ct,"highlight","highlight_value"));
+    const label = [feature, ...functions.map(f => f.name)].join(" ").toLowerCase();
+    channels.push({ attr, feature, offsets: offs, functions, modIndex, isCMY: /cmy|cyan|magenta|yellow/.test(label), def, defFrac, snap, uname, hl });
+  });
+
+  // presets: any element named like a preset that carries attribute/value pairs
+  const presets = [];
+  const presetEls = [...ft.getElementsByTagName("*")].filter(e => /preset/.test(ln(e)) && !/presets$|presetlist|presettypes?$/.test(ln(e)));
+  presetEls.forEach((p, pi) => {
+    if (presetEls.some(o => o !== p && o.contains(p))) return; // nested, handled by parent
+    const values = [];
+    const consider = el => {
+      const a = ga(el,"attribute","attr","attrib","channeltype","channel_type","attribute_name");
+      const v = ga(el,"value","val","abs","absolute","percent","dmx") ?? (el.children.length === 0 && el !== p ? el.textContent.trim() : null);
+      if (a && v !== null && v !== "" && !isNaN(+v)) values.push({ attr: a.toUpperCase(), value: +v, isDmx: ga(el,"dmx") !== null && ga(el,"value","val") === null });
+    };
+    [...p.getElementsByTagName("*")].forEach(consider);
+    // attribute-style values directly on the preset element, e.g. COLORRGB1="100"
+    for (const a of p.attributes) if (/^(colorrgb\d+|color\d|cto|ctc|ctb|dim|colormix\w*)$/i.test(a.name) && !isNaN(+a.value)) values.push({ attr: a.name.toUpperCase(), value: +a.value });
+    if (!values.length) return;
+    const pname = ga(p,"name","label") || childText(p,"name","label") || `Preset ${pi+1}`;
+    const ptype = (ga(p,"type","preset_type","presettype","pool") || "COLOR").toUpperCase();
+    presets.push({ name: pname, type: ptype, index: num(ga(p,"index","no","number")), values });
+  });
+
+  return { fileName, fixtureName, mode, manufacturer, shortName, channels, presets, instByModule, notes };
+}
+
+/* ---------- Conversion model ---------- */
+const state = { files: [], modes: [], mapping: {}, activeMode: 0, out: "xml", outputs: null };
+
+function ma3AttrFor(ch, ma2attr) {
+  const a = (ma2attr || ch.attr).toUpperCase();
+  if (state.mapping[a]) return state.mapping[a];
+  return a;
+}
+const UNAME = [[/^r(ed)?$/i,"ColorAdd_R"],[/^g(reen)?$/i,"ColorAdd_G"],[/^b(lue)?$/i,"ColorAdd_B"],[/^w(hite)?$/i,"ColorAdd_W"],
+  [/^(ww|warm ?white)$/i,"ColorAdd_WW"],[/^(cw|cool ?white|cold ?white)$/i,"ColorAdd_CW"],[/^a(mber)?$/i,"ColorAdd_A"],[/^uv$/i,"ColorAdd_UV"],[/^l(ime)?$/i,"ColorAdd_L"]];
+function defaultMap(a, ch) {
+  if (ch && ch.isCMY && CMY[a]) return CMY[a];
+  if (ch && /^COLORRGB\d+$/.test(a) && a === ch.attr) { const u = UNAME.find(([re]) => re.test(ch.uname.trim())); if (u) return u[1]; }
+  if (MA2_TO_MA3[a]) return MA2_TO_MA3[a];
+  return a.charAt(0) + a.slice(1).toLowerCase().replace(/_(\w)/g, (_, c) => c.toUpperCase());
+}
+function attrInfo(name) { return MA3_ATTR[name] || ["Control","Control","","None",name]; }
+
+function dmxStr(frac, bytes) { const max = 2 ** (8 * bytes); return `${Math.min(max - 1, Math.max(0, Math.round(frac * max)))}/${bytes}`; }
+
+// value in MA2 units (percent / physical) -> DMX fraction on this channel
+function valueToFrac(ch, v, isDmx) {
+  if (isDmx) return v / 256;
+  let best = null;
+  for (const f of ch.functions) {
+    const lo = Math.min(f.physFrom, f.physTo), hi = Math.max(f.physFrom, f.physTo);
+    if (v >= lo && v <= hi && hi > lo) { best = f; break; }
+  }
+  if (!best) best = ch.functions[0];
+  const span = best.physTo - best.physFrom;
+  // MA2 RGB-type channels with phys 0..1 still store presets in percent
+  let vv = v; if (Math.abs(span) <= 1 && v > 1) vv = v / 100;
+  const t = span === 0 ? 0 : (vv - best.physFrom) / span;
+  return best.from + Math.min(1, Math.max(0, t)) * (best.to - best.from);
+}
+
+function buildModel() {
+  const all = state.files.flatMap(f => f.parsed);
+  const notes = [];
+  all.forEach(m => m.notes.forEach(n => notes.push([n[0], `${m.mode}: ${n[1]}`])));
+  const usedAttrs = new Set();
+  const hasPanTilt = all.some(m => m.channels.some(c => ["Pan","Tilt"].includes(ma3AttrFor(c))));
+  const modes = all.map(m => {
+    const geoms = {}; // instance -> geometry name
+    const multi = Object.values(m.instByModule).some(l => l.length > 1);
+    const dmxChannels = [];
+    m.channels.forEach(ch => {
+      const insts = m.instByModule[ch.modIndex] || [{ index: 0, offset: 0 }];
+      const useInsts = multi && insts.every(i => i.offset !== null) ? insts : [insts[0]];
+      if (multi && useInsts.length === 1) notes.push(["warn", `${m.mode}: multi-instance module found but no instance offsets; only the first instance was converted.`]);
+      useInsts.forEach((ins, k) => {
+        const ma3 = ma3AttrFor(ch);
+        usedAttrs.add(ma3);
+        const geo = useInsts.length > 1 ? `Pixel ${k+1}` : (hasPanTilt && ma3 === "Pan" ? "Yoke" : hasPanTilt && ma3 === "Tilt" ? "Head" : "Beam");
+        geoms[geo] = true;
+        const shift = useInsts.length > 1 ? (ins.offset || 0) : 0;
+        const fns = ch.functions.map((f, fi) => {
+          const fa = f.attr && f.attr !== ch.attr ? ma3AttrFor(ch, f.attr) : ma3;
+          usedAttrs.add(fa);
+          return { name: f.name || `${fa} ${fi+1}`, attr: fa, from: f.from, to: f.to, physFrom: f.physFrom, physTo: f.physTo, sets: f.sets.filter(s => state.keepGeneric || !/^(min|max|min\s*>\s*max)$/i.test(s.name.trim())).map(s => ({ ...s })) };
+        });
+        const seen = {}; fns.forEach(f => { if (seen[f.name]) f.name += ` ${++seen[f.name]}`; else seen[f.name] = 1; });
+        dmxChannels.push({ ma2: ch.attr, attr: ma3, geometry: geo, offsets: ch.offsets.map(o => o + shift), bytes: ch.offsets.length, functions: fns, src: ch });
+      });
+    });
+    // presets
+    const presets = m.presets.map(p => {
+      const vals = p.values.map(v => {
+        const ch = dmxChannels.find(c => c.ma2 === v.attr) || dmxChannels.find(c => c.functions.some(f => f.attr === ma3AttrFor(c.src, v.attr)));
+        return { ...v, ma3: ch ? ch.attr : defaultMap(v.attr), ch };
+      });
+      const missing = vals.filter(v => !v.ch).map(v => v.attr);
+      if (missing.length) notes.push(["warn", `${m.mode}: preset "${p.name}" uses ${missing.join(", ")}, which this mode has no channel for.`]);
+      return { ...p, vals };
+    });
+    // single-channel presets become channel sets
+    const mode = state.singleMode;
+    presets.forEach(p => {
+      const real = p.vals.filter(v => v.ch);
+      p.single = real.length === 1;
+      if (p.single && mode !== "plugin") {
+        const v = real[0], frac = valueToFrac(v.ch.src, v.value, v.isDmx);
+        const fn = v.ch.functions.find(f => frac >= f.from && frac < f.to) || v.ch.functions[0];
+        fn.sets.push({ name: p.name, from: frac, to: null, preset: true });
+      }
+    });
+    const dup = {};
+    dmxChannels.forEach(c => { const k = c.geometry + "|" + c.attr; if (dup[k]) notes.push(["warn", `${m.mode}: ${c.attr} appears twice on ${c.geometry}. MA3 needs each attribute once per geometry; rename one in the mapping.`]); dup[k] = 1; });
+    return { name: m.mode, fixtureName: m.fixtureName, manufacturer: m.manufacturer, shortName: m.shortName, fileName: m.fileName, dmxChannels, presets, geoms: Object.keys(geoms) };
+  });
+  // unique mode names
+  const mn = {}; modes.forEach(m => { if (mn[m.name]) m.name += ` (${++mn[m.name]})`; else mn[m.name] = 1; });
+  return { modes, notes, usedAttrs: [...usedAttrs], hasPanTilt };
+}
+
+/* ---------- Writers ---------- */
+function uuid() {
+  if (crypto.randomUUID) return crypto.randomUUID().toUpperCase();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c === "x" ? r : (r&3|8)).toString(16); }).toUpperCase();
+}
+let FT_GUID = uuid();
+
+function fixtureBody(model, meta, ind) {
+  const I = n => ind.repeat(n);
+  const L = [];
+  // attribute definitions
+  const groups = {}; const acts = new Set();
+  model.usedAttrs.forEach(a => { const [fg, f, ag] = attrInfo(a); (groups[fg] ||= new Set()).add(f); if (ag) acts.add(ag); });
+  L.push(`${I(2)}<AttributeDefinitions>`);
+  L.push(`${I(3)}<ActivationGroups>`); [...acts].forEach(a => L.push(`${I(4)}<ActivationGroup Name="${esc(a)}" />`)); L.push(`${I(3)}</ActivationGroups>`);
+  L.push(`${I(3)}<FeatureGroups>`);
+  Object.entries(groups).forEach(([g, fs]) => { L.push(`${I(4)}<FeatureGroup Name="${esc(g)}" Pretty="${esc(g)}">`); [...fs].forEach(f => L.push(`${I(5)}<Feature Name="${esc(f)}" />`)); L.push(`${I(4)}</FeatureGroup>`); });
+  L.push(`${I(3)}</FeatureGroups>`);
+  L.push(`${I(3)}<Attributes>`);
+  model.usedAttrs.forEach(a => { const [fg, f, ag, unit, pretty] = attrInfo(a); L.push(`${I(4)}<Attribute Name="${esc(a)}" Pretty="${esc(pretty)}"${ag ? ` ActivationGroup="${esc(ag)}"` : ""} Feature="${esc(fg)}.${esc(f)}" PhysicalUnit="${unit}" />`); });
+  L.push(`${I(3)}</Attributes>`);
+  L.push(`${I(2)}</AttributeDefinitions>`);
+  L.push(`${I(2)}<Wheels />`);
+  L.push(`${I(2)}<PhysicalDescriptions />`);
+  // models + geometries
+  const allGeo = new Set(model.modes.flatMap(m => m.geoms));
+  L.push(`${I(2)}<Models>`);
+  L.push(`${I(3)}<Model Name="Base" Length="0.300000" Width="0.300000" Height="0.150000" PrimitiveType="Cube" />`);
+  if (model.hasPanTilt) { L.push(`${I(3)}<Model Name="Yoke" Length="0.300000" Width="0.050000" Height="0.250000" PrimitiveType="Cube" />`); L.push(`${I(3)}<Model Name="Head" Length="0.200000" Width="0.200000" Height="0.250000" PrimitiveType="Cylinder" />`); }
+  L.push(`${I(3)}<Model Name="Beam" Length="0.150000" Width="0.150000" Height="0.020000" PrimitiveType="Cylinder" />`);
+  L.push(`${I(2)}</Models>`);
+  const M = "{1,0,0,0}{0,1,0,0}{0,0,1,0}{0,0,0,1}";
+  const beamAttrs = `LampType="LED" PowerConsumption="100.000000" LuminousFlux="5000.000000" ColorTemperature="6000.000000" BeamAngle="25.000000" FieldAngle="25.000000" BeamRadius="0.050000" BeamType="Wash" ColorRenderingIndex="100"`;
+  const beams = [...allGeo].filter(g => g !== "Yoke" && g !== "Head");
+  if (!beams.length) beams.push("Beam");
+  L.push(`${I(2)}<Geometries>`);
+  L.push(`${I(3)}<Geometry Name="Base" Model="Base" Position="${M}">`);
+  const beamLines = d => beams.forEach(b => L.push(`${I(d)}<Beam Name="${esc(b)}" Model="Beam" Position="${M}" ${beamAttrs} />`));
+  if (model.hasPanTilt) {
+    L.push(`${I(4)}<Axis Name="Yoke" Model="Yoke" Position="${M}">`);
+    L.push(`${I(5)}<Axis Name="Head" Model="Head" Position="${M}">`); beamLines(6); L.push(`${I(5)}</Axis>`);
+    L.push(`${I(4)}</Axis>`);
+  } else beamLines(4);
+  L.push(`${I(3)}</Geometry>`);
+  L.push(`${I(2)}</Geometries>`);
+  // modes
+  L.push(`${I(2)}<DMXModes>`);
+  model.modes.forEach(mode => {
+    L.push(`${I(3)}<DMXMode Name="${esc(mode.name)}" Geometry="Base">`);
+    L.push(`${I(4)}<DMXChannels>`);
+    mode.dmxChannels.forEach(c => {
+      const def0 = c.src.defFrac !== null ? c.src.defFrac : (c.attr === "Pan" || c.attr === "Tilt" ? 0.5 : c.functions[0].from);
+      const initFn = c.functions[0].name;
+      L.push(`${I(5)}<DMXChannel DMXBreak="1" Offset="${c.offsets.join(",")}" Default="${dmxStr(def0, c.bytes)}" Highlight="${c.attr === "Dimmer" ? dmxStr(1 - 1/256**c.bytes, c.bytes) : "None"}" Geometry="${esc(c.geometry)}" InitialFunction="${esc(c.geometry)}_${esc(c.attr)}.${esc(c.attr)}.${esc(initFn)}">`);
+      L.push(`${I(6)}<LogicalChannel Attribute="${esc(c.attr)}" Snap="${c.src.snap ? "Yes" : "No"}" Master="${c.attr === "Dimmer" ? "Grand" : "None"}" MibFade="0.000000" DMXChangeTimeLimit="0.000000">`);
+      c.functions.forEach(f => {
+        const hasSets = f.sets.length > 0;
+        L.push(`${I(7)}<ChannelFunction Name="${esc(f.name)}" Attribute="${esc(f.attr)}" OriginalAttribute="" DMXFrom="${dmxStr(f.from, c.bytes)}" Default="${dmxStr(def0 >= f.from && def0 < f.to ? def0 : f.from, c.bytes)}" PhysicalFrom="${(+f.physFrom).toFixed(6)}" PhysicalTo="${(+f.physTo).toFixed(6)}" RealFade="0.000000" RealAcceleration="0.000000"${hasSets ? "" : " /"}>`);
+        if (hasSets) {
+          [...f.sets].filter(s => s.from !== null).sort((a,b) => a.from - b.from)
+            .forEach(s => L.push(`${I(8)}<ChannelSet Name="${esc(s.name)}" DMXFrom="${dmxStr(s.from, c.bytes)}"${s.physFrom !== null && s.physFrom !== undefined ? ` PhysicalFrom="${(+s.physFrom).toFixed(6)}"` : ""}${s.physTo !== null && s.physTo !== undefined ? ` PhysicalTo="${(+s.physTo).toFixed(6)}"` : ""} />`));
+          L.push(`${I(7)}</ChannelFunction>`);
+        }
+      });
+      L.push(`${I(6)}</LogicalChannel>`);
+      L.push(`${I(5)}</DMXChannel>`);
+    });
+    L.push(`${I(4)}</DMXChannels>`);
+    L.push(`${I(4)}<Relations />`);
+    L.push(`${I(4)}<FTMacros />`);
+    L.push(`${I(3)}</DMXMode>`);
+  });
+  L.push(`${I(2)}</DMXModes>`);
+  return L;
+}
+
+function writeMA3(model, meta) {
+  const t = "\t";
+  const L = [`<?xml version="1.0" encoding="UTF-8"?>`, `<GMA3 DataVersion="${esc(meta.dataVer)}">`,
+    `${t}<FixtureType Name="${esc(meta.name)}" Guid="${FT_GUID}" ShortName="${esc(meta.short)}" LongName="${esc(meta.name)}" Manufacturer="${esc(meta.mfr)}" Description="Converted from grandMA2" FixtureTypeID="" Thumbnail="" RefFT="">`,
+    ...fixtureBody(model, meta, t), `${t}</FixtureType>`, `</GMA3>`];
+  return L.join("\n");
+}
+function writeGDTF(model, meta) {
+  const t = "\t";
+  const L = [`<?xml version="1.0" encoding="UTF-8" standalone="no" ?>`, `<GDTF DataVersion="1.1">`,
+    `${t}<FixtureType Name="${esc(meta.name)}" ShortName="${esc(meta.short)}" LongName="${esc(meta.name)}" Manufacturer="${esc(meta.mfr)}" Description="Converted from grandMA2" FixtureTypeID="${FT_GUID}" Thumbnail="" RefFT="">`,
+    ...fixtureBody(model, meta, t), `${t}<Revisions><Revision Text="Converted from grandMA2 XML" Date="${new Date().toISOString().slice(0,19)}" /></Revisions>`,
+    `${t}<FTPresets />`, `${t}<Protocols />`, `${t}</FixtureType>`, `</GDTF>`];
+  return L.join("\n");
+}
+function luaStr(s) { return '"' + String(s).replace(/\\/g,"\\\\").replace(/"/g,'\\"') + '"'; }
+function writeLua(model, meta) {
+  const start = Math.max(1, parseInt(meta.presetStart) || 1);
+  const blocks = model.modes.map(mode => {
+    const list = mode.presets.filter(p => !(p.single && state.singleMode === "channelset")).map(p => {
+      const vals = p.vals.filter(v => v.ch).map(v => `{${luaStr(v.ma3)}, ${+v.value.toFixed(3)}}`).join(", ");
+      return `      {name = ${luaStr(p.name)}, values = {${vals}}},`;
+    });
+    return list.length ? `  [${luaStr(mode.name)}] = {\n${list.join("\n")}\n  },` : null;
+  }).filter(Boolean);
+  if (!blocks.length) return "-- No presets to create for the loaded modes.";
+  return `-- ${meta.name}: colour presets converted from grandMA2
+-- How to use:
+--   1. Patch the fixtures and select the ones you want the presets stored for.
+--   2. Create a new plugin, add a Lua component, paste this script in and run it.
+--   3. Pick the DMX mode when asked. Presets are stored into the Color pool (4)
+--      starting at preset 4.${start}, overwriting what is there.
+
+local PRESETS = {
+${blocks.join("\n")}
+}
+
+local FIRST = ${start}
+
+return function()
+  local names = {}
+  for name in pairs(PRESETS) do names[#names + 1] = name end
+  table.sort(names)
+  local mode = names[1]
+  if #names > 1 then
+    local _, choice = PopupInput({title = "Which DMX mode?", caller = GetFocusDisplay(), items = names})
+    if not choice then return end
+    mode = choice
+  end
+  if SelectionCount() == 0 then
+    Echo("Select the fixtures first, then run the plugin again.")
+    return
+  end
+  for i, p in ipairs(PRESETS[mode]) do
+    local no = FIRST + i - 1
+    Cmd("ClearActive")
+    for _, v in ipairs(p.values) do
+      Cmd(string.format('Attribute "%s" At %s', v[1], v[2]))
+    end
+    Cmd(string.format("Store Preset 4.%d /Overwrite", no))
+    Cmd(string.format('Label Preset 4.%d "%s"', no, p.name))
+  end
+  Cmd("ClearActive")
+  Echo(#PRESETS[mode] .. " colour presets stored for " .. mode)
+end
+`;
+}
+
+/* ---------- UI ---------- */
+const $ = id => document.getElementById(id);
+function meta() { return { name: $("ftName").value.trim() || "Converted Fixture", short: $("ftShort").value.trim(), mfr: $("ftMfr").value.trim(), dataVer: $("dataVer").value.trim() || "2.2.0.0", presetStart: $("presetStart").value }; }
+
+function addTexts(entries, isSample) {
+  for (const { name, text } of entries) {
+    try {
+      const parsed = parseMA2(text, name);
+      state.files.push({ name, parsed, sample: isSample });
+    } catch (e) { state.files.push({ name, parsed: [], error: e.message, sample: isSample }); }
+  }
+  const first = state.files.flatMap(f => f.parsed)[0];
+  if (first) {
+    if (!$("ftName").value || state.autoMeta) { $("ftName").value = first.fixtureName; $("ftShort").value = first.shortName.replace(/\s*M\d+$/i, ""); $("ftMfr").value = first.manufacturer; state.autoMeta = true; }
+  }
+  // seed mapping defaults for new attributes
+  state.files.flatMap(f => f.parsed).forEach(m => {
+    m.channels.forEach(ch => { [ch.attr, ...ch.functions.map(f => f.attr)].forEach(a => { if (!(a in state.mapping)) state.mapping[a] = defaultMap(a, ch); }); });
+    m.presets.forEach(p => p.values.forEach(v => { if (!(v.attr in state.mapping)) state.mapping[v.attr] = defaultMap(v.attr); }));
+  });
+  render();
+}
+
+function render() {
+  state.singleMode = $("singleMode").value;
+  state.keepGeneric = $("keepGeneric").checked;
+  // files
+  $("files").innerHTML = state.files.map((f, i) => `<div class="file"><span class="n" title="${esc(f.name)}">${esc(f.name)}</span>${f.sample ? '<span class="tag sample">Example</span>' : ""}${f.error ? '<span class="tag warn">Not read</span>' : `<span class="tag ok">${f.parsed.map(p => esc(p.mode)).join(", ")}</span>`}</div>`).join("") || `<div class="empty">No files yet.</div>`;
+  // mapping
+  const keys = Object.keys(state.mapping).sort();
+  $("map").innerHTML = keys.map(k => `<code>${esc(k)}</code><input type="text" id="map-${esc(k)}" data-k="${esc(k)}" value="${esc(state.mapping[k])}" list="ma3attrs" aria-label="MA3 attribute for ${esc(k)}">`).join("") +
+    `<datalist id="ma3attrs">${Object.keys(MA3_ATTR).map(a => `<option value="${a}">`).join("")}</datalist>` || "";
+  if (!keys.length) $("map").innerHTML = `<span class="empty">Load a file to see its attributes.</span>`;
+
+  const model = buildModel();
+  state.model = model;
+  const errs = state.files.filter(f => f.error).map(f => ["err", f.error]);
+  const notes = [...errs, ...model.notes];
+  const m = meta();
+  const has = model.modes.length > 0;
+  state.outputs = has ? { xml: writeMA3(model, m), gdtf: writeGDTF(model, m), lua: writeLua(model, m) } : null;
+
+  const presetCount = model.modes.reduce((s, x) => s + x.presets.length, 0);
+  const isColor = a => attrInfo(a)[0] === "Color";
+  const setCount = model.modes.reduce((s, x) => s + x.dmxChannels.filter(c => isColor(c.attr)).reduce((t, c) => t + c.functions.reduce((u, f) => u + f.sets.length, 0), 0), 0);
+  const chCount = model.modes.reduce((s, x) => s + x.dmxChannels.length, 0);
+  $("summary").innerHTML = has ? `<div><b>${model.modes.length}</b>DMX mode${model.modes.length > 1 ? "s" : ""}</div><div><b>${chCount}</b>channels</div><div><b>${model.usedAttrs.length}</b>attributes</div><div><b>${setCount}</b>colour presets (channel sets)</div>${presetCount ? `<div><b>${presetCount}</b>multi-channel presets</div>` : ""}` : `<div class="empty">Load an MA2 fixture XML to convert it.</div>`;
+  if (state.files.some(f => f.sample)) notes.unshift(["info", "Showing the built-in example fixture. Load your own MA2 export to replace it."]);
+  $("notes").innerHTML = notes.map(([k, t]) => `<li class="${k}">${esc(t)}</li>`).join("");
+  ["dlZip","copyXml","copyLua"].forEach(id => $(id).disabled = !has);
+  $("copyLua").hidden = !model.modes.some(x => x.presets.length);
+
+  // modes
+  if (state.activeMode >= model.modes.length) state.activeMode = 0;
+  $("modeTabs").innerHTML = model.modes.map((md, i) => `<button type="button" role="tab" data-i="${i}" aria-selected="${i === state.activeMode}">${esc(md.name)}</button>`).join("");
+  const md = model.modes[state.activeMode];
+  if (!md) { $("modeView").innerHTML = `<p class="empty">Nothing loaded.</p>`; }
+  else {
+    const chRows = md.dmxChannels.map(c => `<tr><td class="mono">${c.offsets.join(", ")}</td><td class="mono">${esc(c.ma2)}</td><td>${esc(c.attr)}</td><td>${c.bytes * 8}-bit</td><td>${c.functions.length}</td><td>${c.functions.reduce((s, f) => s + f.sets.length, 0)}</td><td>${esc(c.geometry)}</td></tr>`).join("");
+    const presetRows = md.presets.map((p, i) => {
+      const rgb = [0,0,0]; let any = false;
+      p.vals.forEach(v => { const s = SWATCH[v.ma3]; if (s) { any = true; for (let k = 0; k < 3; k++) rgb[k] = Math.min(255, rgb[k] + s[k] * v.value / 100); } });
+      const sw = any ? `<span class="sw" style="background:rgb(${rgb.map(Math.round).join(",")})"></span>` : "";
+      const where = p.single && state.singleMode !== "plugin" ? (state.singleMode === "both" ? "Channel set + plugin" : "Channel set") : "Plugin";
+      return `<tr><td>${sw}${esc(p.name)}</td><td class="mono">4.${(parseInt(m.presetStart) || 1) + i}</td><td class="mono">${p.vals.map(v => `${esc(v.ma3)} ${+v.value.toFixed(2)}`).join(" · ")}</td><td>${where}</td></tr>`;
+    }).join("");
+    $("modeView").innerHTML = `<div class="tblwrap"><table><thead><tr><th>DMX</th><th>MA2</th><th>MA3</th><th>Res</th><th>Functions</th><th>Sets</th><th>Geometry</th></tr></thead><tbody>${chRows}</tbody></table></div>` +
+      `<h2 style="margin-top:14px">Colour presets in ${esc(md.name)}</h2>` + colourSets(md) +
+      (md.presets.length ? `<h2 style="margin-top:14px">Multi-channel presets</h2><div class="tblwrap"><table><thead><tr><th>Preset</th><th>Pool</th><th>Values</th><th>Goes to</th></tr></thead><tbody>${presetRows}</tbody></table></div>` : "");
+  }
+  [...$("outTabs").children].forEach(b => b.setAttribute("aria-selected", b.dataset.out === state.out));
+  $("outView").textContent = state.outputs ? state.outputs[state.out] : "";
+}
+
+function colourSets(md) {
+  const rows = [];
+  md.dmxChannels.filter(c => attrInfo(c.attr)[0] === "Color").forEach(c => c.functions.forEach(f => f.sets.forEach(s => rows.push(
+    `<tr><td>${esc(s.name)}</td><td>${esc(c.attr)}</td><td class="mono">${Math.round(s.from * 256)}${s.to !== null && Math.round(s.to * 256) - 1 > Math.round(s.from * 256) ? "–" + (Math.round(s.to * 256) - 1) : ""}</td><td class="mono">${s.physFrom !== null && s.physFrom !== undefined ? +(+s.physFrom).toFixed(2) : ""}</td></tr>`))));
+  return rows.length ? `<div class="tblwrap" style="max-height:360px;overflow:auto"><table><thead><tr><th>Name</th><th>MA3 attribute</th><th>DMX</th><th>Physical</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>` : `<p class="empty">No colour channel sets in this mode.</p>`;
+}
+function toast(t) { $("toast").textContent = t; clearTimeout(toast.t); toast.t = setTimeout(() => $("toast").textContent = "", 4000); }
+async function copy(text, what) {
+  try { await navigator.clipboard.writeText(text); toast(`${what} copied.`); }
+  catch { const r = document.createRange(); r.selectNodeContents($("outView")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast("Copy was blocked. The text is selected; press Ctrl+C or Cmd+C."); }
+}
+const safeName = s => s.replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "_") || "fixture";
+
+function readFiles(list) {
+  const arr = [...list].filter(f => /\.xml$/i.test(f.name) || f.type.includes("xml"));
+  if (!arr.length) { toast("Those files are not .xml files."); return; }
+  if (state.files.some(f => f.sample)) { state.files = []; state.mapping = {}; state.autoMeta = true; FT_GUID = uuid(); }
+  Promise.all(arr.map(f => f.text().then(text => ({ name: f.name, text })))).then(e => addTexts(e, false));
+}
+
+const drop = $("drop");
+drop.addEventListener("click", () => $("fileIn").click());
+drop.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("fileIn").click(); } });
+$("fileIn").addEventListener("change", e => { readFiles(e.target.files); e.target.value = ""; });
+["dragenter","dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", e => readFiles(e.dataTransfer.files));
+$("loadSample").addEventListener("click", () => { state.files = []; state.mapping = {}; state.autoMeta = true; addTexts([{ name: "Example_LED_Wash_Mode1.xml", text: SAMPLE_M1 }, { name: "Example_LED_Wash_Mode2.xml", text: SAMPLE_M2 }], true); });
+$("clear").addEventListener("click", () => { state.files = []; state.mapping = {}; state.autoMeta = true; ["ftName","ftShort","ftMfr"].forEach(i => $(i).value = ""); render(); });
+$("map").addEventListener("input", e => { if (e.target.dataset.k) { state.mapping[e.target.dataset.k] = e.target.value.trim() || e.target.dataset.k; clearTimeout(render.t); render.t = setTimeout(() => { const id = e.target.id, pos = e.target.selectionStart; render(); const el = $(id); if (el) { el.focus(); try { el.setSelectionRange(pos, pos); } catch {} } }, 400); } });
+["ftName","ftShort","ftMfr"].forEach(id => $(id).addEventListener("input", () => { state.autoMeta = false; render(); }));
+["dataVer","presetStart","singleMode","keepGeneric"].forEach(id => $(id).addEventListener("input", render));
+$("modeTabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { state.activeMode = +b.dataset.i; render(); } });
+$("outTabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { state.out = b.dataset.out; render(); } });
+$("copyXml").addEventListener("click", () => state.outputs && copy(state.outputs.xml, "MA3 XML"));
+$("copyLua").addEventListener("click", () => state.outputs && copy(state.outputs.lua, "Preset plugin"));
+$("dlZip").addEventListener("click", async () => {
+  if (!state.outputs) return;
+  const m = meta(), base = safeName(m.name);
+  try {
+    const zip = new JSZip();
+    zip.file(`${base}.xml`, state.outputs.xml);
+    const g = new JSZip(); g.file("description.xml", state.outputs.gdtf);
+    zip.file(`${base}.gdtf`, await g.generateAsync({ type: "uint8array" }));
+    const hasPlugin = state.model.modes.some(md => md.presets.length);
+    if (hasPlugin) zip.file(`${base}_presets.lua`, state.outputs.lua);
+    zip.file("README.txt", `${m.name}, converted from grandMA2\n\n${base}.xml  grandMA3 fixture type. Copy to the MA3 USB stick under\n   grandMA3/shared/resource/lib_fixturetypes/ and import it in Patch > Fixture Types > Import.\n${base}.gdtf  The same fixture as GDTF, a fallback if the XML import is refused.\n${base}_presets.lua  Plugin that stores the colour presets into pool 4 for the selected fixtures.\n`);
+    const blob = await zip.generateAsync({ type: "blob" });
+    const dl = window.claude ? await window.claude.use("downloads") : null;
+    if (!dl) {
+      const url = URL.createObjectURL(blob), a = document.createElement("a");
+      a.href = url; a.download = `${base}_MA3.zip`; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10000); toast("Bundle downloaded."); return;
+    }
+    await dl.save({ filename: `${base}_MA3.zip`, data: blob });
+    toast("Bundle saved.");
+  } catch (e) {
+    if (e && e.code === "declined") toast("Download cancelled.");
+    else toast("The bundle could not be saved here. Use the copy buttons instead.");
+  }
+});
+
+$("loadSample").click();
+</script>
